@@ -1,4 +1,4 @@
-import { applyGate, bossHp, fineText, generateLevel, opText, type RunState } from './gates';
+import { applyGate, bossHp, fineText, generateLevel, opText, shootGate, type RunState } from './gates';
 import { canvasPoint, makeCanvas, type Minigame } from './types';
 
 const W = 360;
@@ -7,8 +7,16 @@ const PLAYER_Y = 500;
 const ROW_GAP = 320;
 const GATE_H = 80;
 
-export function gateRunner(host: HTMLElement, d: number): Minigame {
-  const level = generateLevel(d);
+// Squad Shooter: the same run, but your crowd shoots the gates. Hits pump up
+// "+" gates and wear down "−" gates; × and ÷ gates are armoured. The boss is
+// tuned so you can't win without shooting.
+export function squadShooter(host: HTMLElement, d: number): Minigame {
+  return gateRunner(host, d, true);
+}
+
+export function gateRunner(host: HTMLElement, d: number, shooter = false): Minigame {
+  // Squad Shooter levels are solved assuming ~10 hits per gate you take.
+  const level = generateLevel(d, shooter ? 10 : 0);
   const canvas = makeCanvas(host, W, H);
   const ctx = canvas.getContext('2d')!;
   const speed = 110 + 20 * Math.min(d, 4);
@@ -24,6 +32,8 @@ export function gateRunner(host: HTMLElement, d: number): Minigame {
   let phase: 'run' | 'boss' | 'done' = 'run';
   let fightT = 0;
   let fightStart = { you: 0, boss: 0 };
+  let bullets: { x: number; y: number }[] = [];
+  let fireT = 0;
   let raf = 0;
   let last = performance.now();
   let resolve!: (won: boolean) => void;
@@ -54,6 +64,7 @@ export function gateRunner(host: HTMLElement, d: number): Minigame {
     if (flashT > 0) flashT -= dt;
     if (phase === 'run') {
       scroll += speed * dt;
+      if (shooter) shoot(dt);
       while (nextRow < level.rows.length && rowY(nextRow) + GATE_H / 2 >= PLAYER_Y) {
         const gate = level.rows[nextRow][x < W / 2 ? 0 : 1];
         const before = s.count;
@@ -76,6 +87,25 @@ export function gateRunner(host: HTMLElement, d: number): Minigame {
       fightT = Math.min(1, fightT + dt / 1.8);
       if (fightT >= 1) end(fightStart.you > fightStart.boss);
     }
+  }
+
+  function shoot(dt: number) {
+    fireT -= dt;
+    if (fireT <= 0) {
+      fireT = 0.11;
+      bullets.push({ x: x + (Math.random() - 0.5) * 10, y: PLAYER_Y - 20 });
+    }
+    bullets = bullets.filter((b) => {
+      b.y -= 650 * dt;
+      if (b.y < 0) return false;
+      for (let i = nextRow; i < level.rows.length; i++) {
+        const y = rowY(i);
+        if (b.y > y + GATE_H / 2 || b.y < y - GATE_H / 2) continue;
+        shootGate(level.rows[i][b.x < W / 2 ? 0 : 1], 1);
+        return false;
+      }
+      return true;
+    });
   }
 
   function drawCrowd(cx: number, cy: number, n: number, color: string) {
@@ -121,6 +151,10 @@ export function gateRunner(host: HTMLElement, d: number): Minigame {
         ctx.font = 'bold 34px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(opText(g), gx + gw / 2, y + 8);
+        if (shooter && (g.op === 'x' || g.op === '/' || g.fine === 'boss')) {
+          ctx.font = 'bold 10px system-ui, sans-serif';
+          ctx.fillText('ARMOURED', gx + gw / 2, y - GATE_H / 2 + 14);
+        }
         const fine = fineText(g);
         if (fine) {
           ctx.font = `${fineSize}px system-ui, sans-serif`;
@@ -131,8 +165,9 @@ export function gateRunner(host: HTMLElement, d: number): Minigame {
     });
 
     // Boss.
-    const by = phase === 'run' ? finishY() - 60 : 60;
-    const hp = phase === 'run' ? bossHp(s, level.bossBase) : Math.max(0, Math.round(fightStart.boss - Math.min(fightStart.boss, fightStart.you) * fightT));
+    const fighting = phase === 'boss' || (phase === 'done' && fightT > 0);
+    const by = !fighting ? finishY() - 60 : 60;
+    const hp = !fighting ? bossHp(s, level.bossBase) : Math.max(0, Math.round(fightStart.boss - Math.min(fightStart.boss, fightStart.you) * fightT));
     if (by > -80) {
       ctx.fillStyle = '#5a2a82';
       ctx.beginPath();
@@ -144,9 +179,12 @@ export function gateRunner(host: HTMLElement, d: number): Minigame {
       ctx.fillText(`BOSS ${hp}`, W / 2, by + 7);
     }
 
+    ctx.fillStyle = '#ffd400';
+    for (const b of bullets) ctx.fillRect(b.x - 1.5, b.y - 6, 3, 10);
+
     // Player crowd.
-    const you = phase === 'run' ? s.count : Math.max(0, Math.round(fightStart.you - Math.min(fightStart.boss, fightStart.you) * fightT));
-    const py = phase === 'boss' ? PLAYER_Y - (PLAYER_Y - 150) * fightT * 0.6 : PLAYER_Y;
+    const you = !fighting ? s.count : Math.max(0, Math.round(fightStart.you - Math.min(fightStart.boss, fightStart.you) * fightT));
+    const py = fighting ? PLAYER_Y - (PLAYER_Y - 150) * fightT * 0.6 : PLAYER_Y;
     drawCrowd(x, py, you, '#1d4fd8');
     ctx.fillStyle = '#111';
     ctx.font = 'bold 22px system-ui, sans-serif';

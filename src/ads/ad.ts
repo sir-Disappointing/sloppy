@@ -1,20 +1,86 @@
 import { state } from '../state';
-import { gateRunner } from './gateRunner';
+import { brainTest } from './brainTest';
+import { choose } from './choose';
+import { gateRunner, squadShooter } from './gateRunner';
+import { holeEater } from './holeEater';
+import { numberTower } from './numberTower';
+import { perfectSlice } from './perfectSlice';
 import { pullPin } from './pullPin';
+import { screwSort } from './screwSort';
+import { towerStack } from './towerStack';
 import type { MinigameFactory } from './types';
 
-export type AdKind = 'gates' | 'pins';
+export type AdKind =
+  | 'gates' | 'brain' | 'pins' | 'choose' | 'squad' | 'screws' | 'hole' | 'tower' | 'slice' | 'stack';
 
-const GAMES: Record<AdKind, { make: MinigameFactory; brand: string; captions: string[] }> = {
+interface AdGame {
+  make: MinigameFactory;
+  brand: string;
+  // The patch that adds this ad partner.
+  unlock: number;
+  captions: string[];
+}
+
+const GAMES: Record<AdKind, AdGame> = {
   gates: {
     make: gateRunner,
     brand: 'Crowd Gate Rush 3D',
+    unlock: 0,
     captions: ['Only 1% can beat this boss!', 'Pick the right gates! IQ 180+ only', 'My dad got 9,999 on this level'],
+  },
+  brain: {
+    make: brainTest,
+    brand: 'Brain Test: Tricky IQ Puzzles',
+    unlock: 0,
+    captions: ['99% of people get this WRONG', 'Only geniuses can answer #3', 'Teachers HATE this quiz'],
   },
   pins: {
     make: pullPin,
     brand: 'Pin Rescue Saga',
+    unlock: 1,
     captions: ['99% FAIL this level!', 'Save him!! He is so sad', 'Can you pull the right pin?'],
+  },
+  choose: {
+    make: choose,
+    brand: 'Help Her Choose!',
+    unlock: 1,
+    captions: ['She needs YOUR help 😢', 'Choose wisely...', 'Can you save her day?'],
+  },
+  squad: {
+    make: squadShooter,
+    brand: 'Squad Shooter: Last Gate',
+    unlock: 2,
+    captions: ['Shoot the gates! Grow your army!', 'This is real gameplay*', 'Only 1% reach the boss'],
+  },
+  screws: {
+    make: screwSort,
+    brand: 'Screw Sort Jam 3D',
+    unlock: 2,
+    captions: ['So satisfying!! 😌', 'Can you sort them all?', 'Relax your brain (60 second limit)'],
+  },
+  hole: {
+    make: holeEater,
+    brand: 'Hole Eater.io',
+    unlock: 3,
+    captions: ['Eat EVERYTHING!', 'Real players online: 4', 'Be #1 or be eaten'],
+  },
+  tower: {
+    make: numberTower,
+    brand: 'Number Tower: Hero Wars',
+    unlock: 3,
+    captions: ['Absorb the weak! Avoid the strong!', 'Only 2% reach the boss', 'Can you do the math?'],
+  },
+  slice: {
+    make: perfectSlice,
+    brand: 'Perfect Slice ASMR',
+    unlock: 4,
+    captions: ['Oddly satisfying 😌', 'Only PERFECT cuts allowed', 'Relaxing (mandatory)'],
+  },
+  stack: {
+    make: towerStack,
+    brand: 'Stack Tower Pro',
+    unlock: 4,
+    captions: ['How high can YOU go?', 'Our player made it to 10!', 'Stack to the moon 🚀'],
   },
 };
 
@@ -23,6 +89,7 @@ const FAILS = [
   'So close! (Not really.)',
   'Our ads player did the same thing.',
   'Even the guy in the ad does better than that.',
+  'Have you tried being in the 1%?',
 ];
 
 function pick<T>(xs: T[]): T {
@@ -30,7 +97,16 @@ function pick<T>(xs: T[]): T {
 }
 
 export function availableAds(): AdKind[] {
-  return state.patch >= 1 ? ['gates', 'pins'] : ['gates'];
+  return (Object.keys(GAMES) as AdKind[]).filter((k) => GAMES[k].unlock <= state.patch);
+}
+
+const played = new Map<AdKind, number>();
+
+// Prefer ads you've seen least, so new ad partners show up right away.
+function nextAd(): AdKind {
+  const ads = availableAds();
+  const least = Math.min(...ads.map((k) => played.get(k) ?? 0));
+  return pick(ads.filter((k) => (played.get(k) ?? 0) === least));
 }
 
 interface AdOptions {
@@ -40,12 +116,15 @@ interface AdOptions {
   difficulty?: number;
   // Finale mode: no ad chrome, no skipping, keep retrying until you win.
   finale?: boolean;
+  // v1.5: an ad that played inside another ad.
+  nested?: boolean;
   title?: string;
 }
 
 // Shows an ad. Resolves true if the player beat the minigame inside it.
 export function showAd(opts: AdOptions = {}): Promise<boolean> {
-  const kind = opts.kind ?? pick(availableAds());
+  const kind = opts.kind ?? nextAd();
+  played.set(kind, (played.get(kind) ?? 0) + 1);
   const game = GAMES[kind];
   const difficulty = opts.difficulty ?? state.patch;
   state.inAd = true;
@@ -54,7 +133,7 @@ export function showAd(opts: AdOptions = {}): Promise<boolean> {
   el.className = `ad-overlay${opts.finale ? ' finale' : ''}`;
   el.innerHTML = `
     <div class="ad-top">
-      <span class="ad-label">${opts.finale ? opts.title ?? '' : `Ad · ${game.brand}`}</span>
+      <span class="ad-label">${opts.finale ? opts.title ?? '' : `${opts.nested ? 'Ad inside an ad' : 'Ad'} · ${game.brand}`}</span>
       <button class="ad-skip" disabled></button>
     </div>
     <div class="ad-caption"></div>

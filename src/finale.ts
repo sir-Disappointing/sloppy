@@ -3,12 +3,14 @@ import { elapsed, state } from './state';
 
 // v2.0: the game falls apart and the game from the ads takes over.
 export async function runFinale(app: HTMLElement): Promise<void> {
-  for (const el of app.querySelectorAll<HTMLElement>('.panel, header, #burger')) {
+  for (const el of app.querySelectorAll<HTMLElement>('.panel, header, .stage, .tap-hint, footer, .rate-banner')) {
     el.style.setProperty('--rot', `${(Math.random() - 0.5) * 120}deg`);
     el.style.setProperty('--dx', `${(Math.random() - 0.5) * 300}px`);
     el.style.setProperty('--delay', `${Math.random() * 0.6}s`);
     el.classList.add('collapse');
   }
+  // The finale looks clean again: no decay, no dark mode.
+  for (const c of [...document.body.classList]) if (c.startsWith('patch-')) document.body.classList.remove(c);
   await new Promise((r) => setTimeout(r, 2200));
 
   app.innerHTML = `
@@ -19,8 +21,10 @@ export async function runFinale(app: HTMLElement): Promise<void> {
     </div>`;
   await new Promise<void>((r) => (app.querySelector<HTMLButtonElement>('.start')!.onclick = () => r()));
 
-  await showAd({ kind: 'gates', difficulty: 4, finale: true, title: 'Part 1 of 2 · Terms & Conditions apply' });
-  await showAd({ kind: 'pins', difficulty: 4, finale: true, title: 'Part 2 of 2 · The hand is not on your side' });
+  await showAd({ kind: 'gates', difficulty: 6, finale: true, title: 'Part 1 of 4 · Terms & Conditions apply' });
+  await showAd({ kind: 'hole', difficulty: 6, finale: true, title: 'Part 2 of 4 · Everyone is a bot' });
+  await showAd({ kind: 'pins', difficulty: 6, finale: true, title: 'Part 3 of 4 · The hand is not on your side' });
+  await showAd({ kind: 'brain', difficulty: 6, finale: true, title: 'Part 4 of 4 · Only 1% can answer this' });
 
   state.finishedAt = performance.now();
   app.innerHTML = `

@@ -98,15 +98,32 @@ function makeGate(d: number): Gate {
   return { op, value, fine, fineValue };
 }
 
+// What a gate becomes after `hits` shots in Squad Shooter. "+" gates grow,
+// "−" gates shrink and flip; ×, ÷ and boss gates are armoured.
+export function shootGate(g: Gate, hits: number): void {
+  if (g.fine === 'boss') return;
+  if (g.op === '+') g.value += hits;
+  else if (g.op === '-') {
+    if (g.value > hits) g.value -= hits;
+    else {
+      g.op = '+';
+      g.value = hits - g.value + 1;
+    }
+  }
+}
+
 // Best achievable margin over all paths, as the largest boss base still beatable.
-function solve(rows: [Gate, Gate][], start: number): number {
+// `boost` assumes that many hits on every gate you take (Squad Shooter).
+function solve(rows: [Gate, Gate][], start: number, boost: number): number {
   let best = -Infinity;
   const paths = 1 << rows.length;
   for (let p = 0; p < paths; p++) {
     let s: RunState = { count: start, bossA: 1, bossB: 0 };
     let alive = true;
     for (let i = 0; i < rows.length; i++) {
-      s = applyGate(s, rows[i][(p >> i) & 1]);
+      const g = { ...rows[i][(p >> i) & 1] };
+      if (boost) shootGate(g, boost);
+      s = applyGate(s, g);
       if (s.count <= 0) { alive = false; break; }
     }
     if (!alive) continue;
@@ -117,13 +134,13 @@ function solve(rows: [Gate, Gate][], start: number): number {
   return best;
 }
 
-export function generateLevel(d: number): Level {
+export function generateLevel(d: number, boost = 0): Level {
   const n = 6 + Math.min(d, 4);
   const start = 10;
   for (let attempt = 0; attempt < 200; attempt++) {
     const rows: [Gate, Gate][] = [];
     for (let i = 0; i < n; i++) rows.push([makeGate(d), makeGate(d)]);
-    const maxBase = solve(rows, start);
+    const maxBase = solve(rows, start, boost);
     if (maxBase < 20) continue;
     // Higher difficulty leaves less room for a sloppy route.
     const slack = 0.6 + 0.08 * Math.min(d, 4);
