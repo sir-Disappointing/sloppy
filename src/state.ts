@@ -11,6 +11,8 @@ export const state = {
   energy: 20,
   maxEnergy: 20,
   asleep: new Set<number>(),
+  // v1.4 Battle Pass progress towards tier 2, in percent.
+  battlePass: 0,
   adsWon: 0,
   adsFailed: 0,
   startedAt: 0,
@@ -75,4 +77,40 @@ export function elapsed(): string {
   const end = state.finishedAt || performance.now();
   const s = state.startedAt ? Math.floor((end - state.startedAt) / 1000) : 0;
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// Progress survives a reload. Storage can be unavailable (private mode), so
+// every access is wrapped and the game works without it.
+const SAVE_KEY = 'ibe3d-save';
+const SAVED = ['money', 'totalEarned', 'tapValue', 'tapUpgrades', 'workers', 'tickets', 'patch', 'energy', 'battlePass', 'adsWon', 'adsFailed'] as const;
+
+export function save(finalPatch: number): void {
+  if (!state.startedAt || state.patch >= finalPatch) return;
+  const data: Record<string, number> = { elapsed: performance.now() - state.startedAt };
+  for (const k of SAVED) data[k] = state[k];
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch {
+    // No storage, no saves.
+  }
+}
+
+export function load(): void {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw) as Record<string, number>;
+    for (const k of SAVED) if (typeof data[k] === 'number') state[k] = data[k];
+    state.startedAt = performance.now() - (data.elapsed || 0);
+  } catch {
+    // A broken save is no save.
+  }
+}
+
+export function wipeSave(): void {
+  try {
+    localStorage.removeItem(SAVE_KEY);
+  } catch {
+    // Nothing to wipe.
+  }
 }

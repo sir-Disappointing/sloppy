@@ -19,8 +19,8 @@ export function pullPin(host: HTMLElement, d: number): Minigame {
   const level = makeLevel(d >= 2 ? 1 : 0);
   const canvas = makeCanvas(host, W, H);
   const ctx = canvas.getContext('2d')!;
-  // From patch v1.3 on, the "player" from the ad tries to solve it for you. Badly.
-  const handActive = d >= 3;
+  // From patch v1.4 on, the "player" from the ad tries to solve it for you. Badly.
+  const handActive = d >= 4;
   const hand = { x: W / 2, y: H + 40, target: -1, wait: 4 };
   let done = false;
   let raf = 0;
